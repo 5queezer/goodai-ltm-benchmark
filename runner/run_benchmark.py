@@ -15,12 +15,24 @@ from dataset_interfaces.interface import TestExample
 from model_interfaces.length_bias_agent import LengthBiasAgent
 from model_interfaces.interface import ChatSession
 from model_interfaces.llm_interface import LLMChatSession, TimestampLLMChatSession
-from model_interfaces.ltm_agent_wrapper import LTMAgentWrapper, LTMAgentVariant
-from model_interfaces.memgpt_interface import MemGPTChatSession
+try:
+    from model_interfaces.ltm_agent_wrapper import LTMAgentWrapper, LTMAgentVariant
+except Exception:
+    LTMAgentWrapper = LTMAgentVariant = None
+try:
+    from model_interfaces.memgpt_interface import MemGPTChatSession
+except Exception:
+    MemGPTChatSession = None
 from model_interfaces.cost_estimation import CostEstimationChatSession
 from model_interfaces.human import HumanChatSession
-from model_interfaces.huggingface_interface import HFChatSession
-from model_interfaces.gemini_interface import GeminiProInterface
+try:
+    from model_interfaces.huggingface_interface import HFChatSession
+except Exception:
+    HFChatSession = None
+try:
+    from model_interfaces.gemini_interface import GeminiProInterface
+except Exception:
+    GeminiProInterface = None
 from runner.config import RunConfig
 from runner.scheduler import TestRunner
 from utils.ui import ask_yesno, colour_print
@@ -65,6 +77,28 @@ def get_chat_session(name: str, max_prompt_size: Optional[int], run_name: str, i
     if name.startswith("huggingface/"):
         kwargs.pop("is_local")
         return HFChatSession(model=name, **kwargs)
+
+    if name.startswith("muninn"):
+        from model_interfaces.muninn_interface import MuninnChatSession
+        muninn_kwargs = {"run_name": run_name, "is_local": True}
+        # Parse optional config: muninn(url=...,llm=...,model=...)
+        if "(" in name:
+            params_str = name.split("(", 1)[1].rstrip(")")
+            for param in params_str.split(","):
+                key, value = param.strip().split("=", 1)
+                key = key.strip()
+                value = value.strip()
+                if key == "url":
+                    muninn_kwargs["muninn_url"] = value
+                elif key == "llm":
+                    muninn_kwargs["llm_url"] = value
+                elif key == "model":
+                    muninn_kwargs["llm_model"] = value
+                elif key == "vault":
+                    muninn_kwargs["vault"] = value
+                elif key == "token":
+                    muninn_kwargs["muninn_token"] = value
+        return MuninnChatSession(**muninn_kwargs)
 
     try:
         if name.startswith("ts-"):
