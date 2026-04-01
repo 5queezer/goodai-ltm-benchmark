@@ -105,7 +105,8 @@ class MuninnChatSession(ChatSession):
         # 3. Write the user message as an engram
         self._write_engram(user_message)
 
-        return response
+        # Never return None — the benchmark's flatten_context crashes on it
+        return response or "Understood."
 
     def _recall(self, query: str) -> list[dict]:
         """Recall relevant engrams from the vault."""
