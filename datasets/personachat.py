@@ -47,7 +47,12 @@ class PersonaChatDataset(DatasetInterface):
                 "The HuggingFace `datasets` library is required for the PersonaChat dataset. "
                 "Install it with: pip install datasets"
             )
-        self._hf_data = hf_load_dataset("bavard/personachat_truecased", split="train")
+        try:
+            self._hf_data = hf_load_dataset("bavard/personachat_truecased", split="train")
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to load PersonaChat dataset from HuggingFace: {e}"
+            ) from e
 
     def generate_examples(self, num_examples: int) -> List[TestExample]:
         examples: List[TestExample] = []
