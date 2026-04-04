@@ -44,11 +44,11 @@ def _load_hf_dataset(split: str = "test"):
         hf_datasets = importlib.import_module("datasets")
         if not hasattr(hf_datasets, "load_dataset"):
             raise ImportError
-    except ImportError:
+    except ImportError as exc:
         raise ImportError(
             "The HuggingFace `datasets` library is required for the MultiWOZ "
             "dataset.  Install it with:  pip install datasets"
-        )
+        ) from exc
     finally:
         # Restore the original path and local modules so the rest of the
         # application keeps working.
@@ -83,9 +83,11 @@ def _extract_ground_truth(dialogue: dict) -> dict[str, dict[str, str]]:
             if svc not in state:
                 state[svc] = {}
             for name, vals in zip(slot_names, slot_values):
+                if not vals:
+                    continue
                 # Strip the "domain-" prefix (e.g. "hotel-name" -> "name").
                 short = name.split("-", 1)[-1] if "-" in name else name
-                state[svc][short] = vals[0] if len(vals) == 1 else vals[0]
+                state[svc][short] = vals[0]
     return state
 
 
@@ -203,6 +205,9 @@ class MultiWOZDataset(DatasetInterface):
             return 0, 0, ["No ground-truth slots to evaluate."]
 
         # Parse the agent's JSON response.
+        if not responses:
+            msg = "No response provided by the agent."
+            return 0, total_slots, [msg]
         try:
             predicted = sanitize_and_parse_json(responses[0])
         except (ValueError, JSONDecodeError) as exc:
