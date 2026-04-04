@@ -149,7 +149,7 @@ class MultiWOZDataset(DatasetInterface):
         # number of *valid* domains and that produce non-empty ground truth.
         candidates: list[dict] = []
         for dialogue in dataset:
-            services = [s for s in dialogue["services"] if s in VALID_DOMAINS]
+            services = {s for s in dialogue["services"] if s in VALID_DOMAINS}
             if not (self.min_domains <= len(services) <= self.max_domains):
                 continue
             gt = {
