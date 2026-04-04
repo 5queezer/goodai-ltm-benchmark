@@ -28,7 +28,7 @@ def _load_hf_dataset(split: str = "test"):
     # If the HuggingFace module is already loaded, reuse it.
     hf = sys.modules.get("datasets")
     if hf is not None and hasattr(hf, "load_dataset"):
-        return hf.load_dataset("multi_woz_v22", split=split, trust_remote_code=True)
+        return hf.load_dataset("multi_woz_v22", split=split, trust_remote_code=True, revision="fd8c4a9484b1f47152fe23ddcc87289777d355fd")
 
     # Stash the local ``datasets`` package so importlib finds the HF one.
     project_root = str(pathlib.Path(__file__).resolve().parent.parent)
@@ -56,7 +56,7 @@ def _load_hf_dataset(split: str = "test"):
         sys.modules.update(saved_modules)
 
     return hf_datasets.load_dataset(
-        "multi_woz_v22", split=split, trust_remote_code=True,
+        "multi_woz_v22", split=split, trust_remote_code=True, revision="fd8c4a9484b1f47152fe23ddcc87289777d355fd",
     )
 
 
@@ -82,7 +82,7 @@ def _extract_ground_truth(dialogue: dict) -> dict[str, dict[str, str]]:
                 continue
             if svc not in state:
                 state[svc] = {}
-            for name, vals in zip(slot_names, slot_values):
+            for name, vals in zip(slot_names, slot_values, strict=True):
                 if not vals:
                     continue
                 # Strip the "domain-" prefix (e.g. "hotel-name" -> "name").
