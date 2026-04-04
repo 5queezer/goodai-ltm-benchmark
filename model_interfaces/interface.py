@@ -62,5 +62,9 @@ class ChatSession(ABC):
     def load(self):
         pass
 
+    def close(self):
+        """Clean up resources. Override in subclasses that need cleanup."""
+        pass
+
     def token_len(self, text: str) -> int:
         return count_tokens_for_model(text=text)
