@@ -92,19 +92,17 @@ class MuninnChatSession(ChatSession):
         if self._muninn_client is None:
             # Import here to avoid hard dependency at module level
             try:
-                import sys
-                sys.path.insert(0, "/home/christian/Projects/muninndb/sdk/python")
                 from muninn import MuninnClient
                 self._muninn_client = MuninnClient(
                     self.muninn_url,
                     token=self.muninn_token or None,
                 )
                 self._loop.run_until_complete(self._muninn_client.__aenter__())
-            except ImportError:
+            except ImportError as exc:
                 raise RuntimeError(
                     "MuninnDB Python SDK not found. "
-                    "Install from /home/christian/Projects/muninndb/sdk/python"
-                )
+                    "Install it as a dependency (pip install muninn-sdk)."
+                ) from exc
 
     def reply(self, user_message: str, agent_response: Optional[str] = None) -> str:
         if agent_response is not None:
@@ -218,13 +216,15 @@ class MuninnChatSession(ChatSession):
                         "temperature": 0.0,
                     },
                 )
+                if resp.status_code == 429:
+                    time.sleep(2 ** attempt)
+                    continue
+                if resp.status_code >= 500:
+                    logger.warning("LLM server error: %d", resp.status_code)
+                    time.sleep(2 ** attempt)
+                    continue
                 data = resp.json()
                 if "error" in data:
-                    code = data["error"].get("code", 0)
-                    if code == 429:
-                        import time as _time
-                        _time.sleep(2 ** attempt)
-                        continue
                     logger.warning("LLM error: %s", data["error"])
                     return "I'm not sure."
                 content = data["choices"][0]["message"].get("content")

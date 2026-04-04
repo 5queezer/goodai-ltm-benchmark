@@ -57,9 +57,12 @@ class LocationsDirectionsDataset(LocationsDataset):
         import os
         eval_model = os.environ.get("LTM_BENCH_EVAL_MODEL", "gpt-4-turbo")
         # Temporarily disable cost callback for non-OpenAI eval models
-        orig_cb, self.cost_callback = self.cost_callback, (self.cost_callback if eval_model.startswith("gpt-") else None)
-        response = self.ask_llm(context, model=eval_model)
-        self.cost_callback = orig_cb
+        orig_cb = self.cost_callback
+        self.cost_callback = self.cost_callback if eval_model.startswith("gpt-") else None
+        try:
+            response = self.ask_llm(context, model=eval_model)
+        finally:
+            self.cost_callback = orig_cb
         try:
             directions = sanitize_and_parse_json(response)
             assert isinstance(directions, list)

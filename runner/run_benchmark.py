@@ -17,21 +17,21 @@ from model_interfaces.interface import ChatSession
 from model_interfaces.llm_interface import LLMChatSession, TimestampLLMChatSession
 try:
     from model_interfaces.ltm_agent_wrapper import LTMAgentWrapper, LTMAgentVariant
-except Exception:
+except (ImportError, ModuleNotFoundError):
     LTMAgentWrapper = LTMAgentVariant = None
 try:
     from model_interfaces.memgpt_interface import MemGPTChatSession
-except Exception:
+except (ImportError, ModuleNotFoundError):
     MemGPTChatSession = None
 from model_interfaces.cost_estimation import CostEstimationChatSession
 from model_interfaces.human import HumanChatSession
 try:
     from model_interfaces.huggingface_interface import HFChatSession
-except Exception:
+except (ImportError, ModuleNotFoundError):
     HFChatSession = None
 try:
     from model_interfaces.gemini_interface import GeminiProInterface
-except Exception:
+except (ImportError, ModuleNotFoundError):
     GeminiProInterface = None
 from runner.config import RunConfig
 from runner.scheduler import TestRunner
@@ -97,6 +97,7 @@ def get_chat_session(name: str, max_prompt_size: Optional[int], run_name: str, i
                 elif key == "vault":
                     muninn_kwargs["vault"] = value
                 elif key == "token":
+                    logging.warning("Passing token inline is insecure. Use MUNINN_TOKEN env var instead.")
                     muninn_kwargs["muninn_token"] = value
                 elif key == "dream":
                     muninn_kwargs["dream_enabled"] = value.lower() in ("true", "1", "yes")
@@ -106,6 +107,7 @@ def get_chat_session(name: str, max_prompt_size: Optional[int], run_name: str, i
                     muninn_kwargs["dream_force"] = value.lower() in ("true", "1", "yes")
                 elif key == "trace":
                     muninn_kwargs["trace_enabled"] = value.lower() in ("true", "1", "yes")
+        muninn_kwargs.setdefault("muninn_token", os.environ.get("MUNINN_TOKEN", ""))
         return MuninnChatSession(**muninn_kwargs)
 
     try:
