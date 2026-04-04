@@ -194,8 +194,30 @@ class MuninnChatSession(ChatSession):
                 return "I'm not sure."
         return "I'm not sure."
 
+    def _trigger_dream(self):
+        """Trigger dream consolidation on the MuninnDB server."""
+        self._ensure_clients()
+        try:
+            resp = self._http_client.post(
+                f"{self.muninn_url}/api/dream",
+                json={"force": True, "scope": self.vault},
+                timeout=120.0,
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                logger.info(
+                    "Dream completed: %s, reports=%d",
+                    data.get("total_duration", "?"),
+                    len(data.get("reports", [])),
+                )
+            else:
+                logger.warning("Dream trigger failed: %d %s", resp.status_code, resp.text[:200])
+        except Exception as e:
+            logger.warning("Dream trigger error: %s", e)
+
     def reset(self):
-        """Reset by rotating session tag for the next test run."""
+        """Reset by triggering dream consolidation, then rotating session tag."""
+        self._trigger_dream()
         self._session_tag = f"bench_{int(time.time())}"
         self._write_count = 0
         logger.info("Reset: new session %s in vault %s", self._session_tag, self.vault)
