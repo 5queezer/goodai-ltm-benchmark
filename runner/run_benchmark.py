@@ -98,6 +98,14 @@ def get_chat_session(name: str, max_prompt_size: Optional[int], run_name: str, i
                     muninn_kwargs["vault"] = value
                 elif key == "token":
                     muninn_kwargs["muninn_token"] = value
+                elif key == "dream":
+                    muninn_kwargs["dream_enabled"] = value.lower() in ("true", "1", "yes")
+                elif key == "dream_dry_run":
+                    muninn_kwargs["dream_dry_run"] = value.lower() in ("true", "1", "yes")
+                elif key == "dream_force":
+                    muninn_kwargs["dream_force"] = value.lower() in ("true", "1", "yes")
+                elif key == "trace":
+                    muninn_kwargs["trace_enabled"] = value.lower() in ("true", "1", "yes")
         return MuninnChatSession(**muninn_kwargs)
 
     try:

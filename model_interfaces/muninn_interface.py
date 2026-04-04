@@ -8,8 +8,10 @@ responses from recalled context.
 import asyncio
 import json
 import logging
+import os
 import time
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Optional
 
 import httpx
@@ -40,32 +42,48 @@ class MuninnChatSession(ChatSession):
     max_recall: int = 15
     recall_threshold: float = 0.1
 
+    # Dream consolidation
+    dream_enabled: bool = True
+    dream_dry_run: bool = False
+    dream_force: bool = True
+
+    # Trace capture
+    trace_enabled: bool = True
+
     # Always local (no cost tracking)
     is_local: bool = True
 
     # Internal state
     _write_count: int = 0
     _session_tag: str = ""
+    _run_id: str = ""
+    _vault_counter: int = 0
 
     # System prompt for the LLM
     _system_prompt: str = (
-        "You are a helpful assistant with access to a memory system. "
-        "Answer questions using ONLY the provided memory context. "
-        "Be extremely brief — one sentence or less. "
-        "If the context contains the answer, state it directly. "
-        "If not, say you don't remember."
+        "You are a recall assistant. "
+        "Reply with ONLY the direct answer. "
+        "No reasoning, no explanation, no preamble, no chain-of-thought. "
+        "If the memory context contains the answer, state it in the fewest words possible. "
+        "If not, reply: I don't remember."
     )
 
     def __post_init__(self):
         super().__post_init__()
         self._session_tag = f"bench_{int(time.time())}"
+        self._run_id = f"{int(time.time())}"
         self._loop = asyncio.new_event_loop()
         self._http_client = None  # lazy init
         self._muninn_client = None  # lazy init
+        self._trace_file = None
 
     @property
     def name(self):
         return f"MuninnChatSession - {self.llm_model}"
+
+    @property
+    def _active_vault(self):
+        return f"{self.vault}-{self._run_id}-{self._vault_counter}"
 
     def _ensure_clients(self):
         """Lazily initialize HTTP clients."""
@@ -102,7 +120,11 @@ class MuninnChatSession(ChatSession):
         # 2. Generate response using LLM with recalled context
         response = self._generate_response(user_message, recalled)
 
-        # 3. Write the user message as an engram
+        # 3. Capture trace if enabled
+        if self.trace_enabled:
+            self._write_trace(user_message, recalled, response)
+
+        # 4. Write the user message as an engram
         self._write_engram(user_message)
 
         # Never return None — the benchmark's flatten_context crashes on it
@@ -113,7 +135,7 @@ class MuninnChatSession(ChatSession):
         try:
             result = self._loop.run_until_complete(
                 self._muninn_client.activate(
-                    vault=self.vault,
+                    vault=self._active_vault,
                     context=[query],
                     max_results=self.max_recall,
                     threshold=self.recall_threshold,
@@ -130,10 +152,10 @@ class MuninnChatSession(ChatSession):
     def _write_engram(self, message: str):
         """Write a message as an engram to the vault."""
         try:
-            concept = message[:120].strip()
+            concept = message.strip()
             self._loop.run_until_complete(
                 self._muninn_client.write(
-                    vault=self.vault,
+                    vault=self._active_vault,
                     concept=concept,
                     content=message,
                     tags=["ltm_bench", self._session_tag],
@@ -142,6 +164,25 @@ class MuninnChatSession(ChatSession):
             self._write_count += 1
         except Exception as e:
             logger.warning("Write failed: %s", e)
+
+    def _write_trace(self, query, engrams, response, dataset=None):
+        if self._trace_file is None:
+            trace_dir = os.path.join("data", "traces")
+            os.makedirs(trace_dir, exist_ok=True)
+            self._trace_file = open(
+                os.path.join(trace_dir, f"muninn_{self.run_name}.jsonl"), "a"
+            )
+        entry = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "query": query,
+            "engrams": [
+                {"score": e.get("score"), "concept": e.get("concept"), "content": e.get("content", "")[:200]}
+                for e in engrams
+            ],
+            "response": response,
+        }
+        self._trace_file.write(json.dumps(entry) + "\n")
+        self._trace_file.flush()
 
     def _generate_response(self, user_message: str, recalled: list[dict]) -> str:
         """Generate a response using the LLM with recalled context."""
@@ -158,7 +199,6 @@ class MuninnChatSession(ChatSession):
 
         headers = {"Content-Type": "application/json"}
         # Support OpenRouter and other providers that need bearer auth
-        import os
         api_key = os.environ.get("OPENROUTER_API_KEY", "")
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
@@ -200,7 +240,7 @@ class MuninnChatSession(ChatSession):
         try:
             resp = self._http_client.post(
                 f"{self.muninn_url}/api/dream",
-                json={"force": True, "scope": self.vault},
+                json={"force": self.dream_force, "scope": self._active_vault, "dry_run": self.dream_dry_run},
                 timeout=120.0,
             )
             if resp.status_code == 200:
@@ -217,10 +257,12 @@ class MuninnChatSession(ChatSession):
 
     def reset(self):
         """Reset by triggering dream consolidation, then rotating session tag."""
-        self._trigger_dream()
+        if self.dream_enabled:
+            self._trigger_dream()
+        self._vault_counter += 1
         self._session_tag = f"bench_{int(time.time())}"
         self._write_count = 0
-        logger.info("Reset: new session %s in vault %s", self._session_tag, self.vault)
+        logger.info("Reset: new session %s in vault %s", self._session_tag, self._active_vault)
 
     def save(self):
         """Persist adapter state to disk."""
@@ -231,6 +273,8 @@ class MuninnChatSession(ChatSession):
             "muninn_url": self.muninn_url,
             "llm_url": self.llm_url,
             "llm_model": self.llm_model,
+            "run_id": self._run_id,
+            "vault_counter": self._vault_counter,
         }
         with open(self.save_path / "muninn_state.json", "w") as f:
             json.dump(state, f)
@@ -243,10 +287,14 @@ class MuninnChatSession(ChatSession):
                 state = json.load(f)
             self._session_tag = state["session_tag"]
             self._write_count = state["write_count"]
+            self._run_id = state.get("run_id", self._run_id)
+            self._vault_counter = state.get("vault_counter", self._vault_counter)
 
     def __del__(self):
         """Clean up async resources."""
         try:
+            if self._trace_file is not None:
+                self._trace_file.close()
             if self._muninn_client is not None:
                 self._loop.run_until_complete(self._muninn_client.__aexit__(None, None, None))
             if self._http_client is not None:
