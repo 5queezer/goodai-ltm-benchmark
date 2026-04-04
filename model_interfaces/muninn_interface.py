@@ -14,6 +14,7 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Optional
+from urllib.parse import urlparse
 
 import httpx
 
@@ -169,7 +170,7 @@ class MuninnChatSession(ChatSession):
             trace_dir = os.path.join("data", "traces")
             os.makedirs(trace_dir, exist_ok=True)
             self._trace_file = open(
-                os.path.join(trace_dir, f"muninn_{self.run_name}.jsonl"), "a"
+                os.path.join(trace_dir, f"muninn_{self.run_name}_{self._run_id}.jsonl"), "a"
             )
         entry = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -197,8 +198,9 @@ class MuninnChatSession(ChatSession):
         )
 
         headers = {"Content-Type": "application/json"}
-        # Only send OpenRouter API key to OpenRouter endpoints
-        if "openrouter.ai" in self.llm_url:
+        # Only send OpenRouter API key to verified OpenRouter endpoints
+        llm_host = (urlparse(self.llm_url).hostname or "").lower()
+        if llm_host in ("openrouter.ai", "www.openrouter.ai"):
             api_key = os.environ.get("OPENROUTER_API_KEY", "")
             if api_key:
                 headers["Authorization"] = f"Bearer {api_key}"
@@ -225,6 +227,9 @@ class MuninnChatSession(ChatSession):
                     logger.warning("LLM server error: %d", resp.status_code)
                     time.sleep(2 ** attempt)
                     continue
+                if resp.status_code < 200 or resp.status_code >= 300:
+                    logger.warning("LLM request failed: %d %s", resp.status_code, resp.text[:200])
+                    return "I'm not sure."
                 data = resp.json()
                 if "error" in data:
                     logger.warning("LLM error: %s", data["error"])
