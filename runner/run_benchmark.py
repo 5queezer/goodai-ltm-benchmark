@@ -259,6 +259,7 @@ def _main(
     runner = TestRunner(config=conf, agent=agent, tests=examples, skip_evaluations=agent_name.startswith("cost("))
     time1 = time.time()
     runner.run()
+    agent.close()
 
     time2 = time.time()
     elapsed = (time2 - time1) / 60

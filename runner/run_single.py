@@ -55,6 +55,7 @@ def main(agent: str, datasets: str, max_prompt_size: int, num_examples_per_datas
         tests=examples,
     )
     runner.run()
+    chat_session.close()
     print("done")
 
 

@@ -318,26 +318,26 @@ class MuninnChatSession(ChatSession):
             if self._trace_file is not None:
                 self._trace_file.close()
                 self._trace_file = None
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Error closing trace file: %s", e)
         try:
             if self._muninn_client is not None:
                 self._loop.run_until_complete(self._muninn_client.__aexit__(None, None, None))
                 self._muninn_client = None
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Error closing Muninn client: %s", e)
         try:
             if self._http_client is not None:
                 self._http_client.close()
                 self._http_client = None
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Error closing HTTP client: %s", e)
         try:
             if self._loop is not None:
                 self._loop.close()
                 self._loop = None
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Error closing event loop: %s", e)
 
     def __del__(self):
         """Clean up async resources."""
