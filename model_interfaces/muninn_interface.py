@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import time
+import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Optional
@@ -70,8 +71,8 @@ class MuninnChatSession(ChatSession):
 
     def __post_init__(self):
         super().__post_init__()
-        self._session_tag = f"bench_{int(time.time())}"
-        self._run_id = f"{int(time.time())}"
+        self._session_tag = f"bench_{uuid.uuid4().hex[:12]}"
+        self._run_id = uuid.uuid4().hex[:12]
         self._loop = asyncio.new_event_loop()
         self._http_client = None  # lazy init
         self._muninn_client = None  # lazy init
@@ -174,7 +175,7 @@ class MuninnChatSession(ChatSession):
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "query": query,
             "engrams": [
-                {"score": e.get("score"), "concept": e.get("concept"), "content": e.get("content", "")[:200]}
+                {"score": e.get("score"), "concept": e.get("concept"), "content": e.get("content", "")}
                 for e in engrams
             ],
             "response": response,
@@ -196,10 +197,11 @@ class MuninnChatSession(ChatSession):
         )
 
         headers = {"Content-Type": "application/json"}
-        # Support OpenRouter and other providers that need bearer auth
-        api_key = os.environ.get("OPENROUTER_API_KEY", "")
-        if api_key:
-            headers["Authorization"] = f"Bearer {api_key}"
+        # Only send OpenRouter API key to OpenRouter endpoints
+        if "openrouter.ai" in self.llm_url:
+            api_key = os.environ.get("OPENROUTER_API_KEY", "")
+            if api_key:
+                headers["Authorization"] = f"Bearer {api_key}"
 
         for attempt in range(5):
             try:
@@ -260,7 +262,7 @@ class MuninnChatSession(ChatSession):
         if self.dream_enabled:
             self._trigger_dream()
         self._vault_counter += 1
-        self._session_tag = f"bench_{int(time.time())}"
+        self._session_tag = f"bench_{uuid.uuid4().hex[:12]}"
         self._write_count = 0
         logger.info("Reset: new session %s in vault %s", self._session_tag, self._active_vault)
 
