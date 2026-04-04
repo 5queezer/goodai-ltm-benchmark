@@ -1,3 +1,4 @@
+import json
 import logging
 from json import JSONDecodeError
 from dataclasses import dataclass
@@ -106,11 +107,10 @@ def _build_question(ground_truth: dict[str, dict[str, str]]) -> str:
     """Build the final recall question."""
     domains = sorted(ground_truth.keys())
     domain_list = ", ".join(domains)
-    slot_hint_parts = []
-    for d in domains:
-        slots = sorted(ground_truth[d].keys())
-        slot_hint_parts.append(f'"{d}": {{{", ".join(repr(s) + ": ..." for s in slots)}}}')
-    slot_hint = "{\n  " + ",\n  ".join(slot_hint_parts) + "\n}"
+    slot_hint = json.dumps(
+        {d: {s: "<value>" for s in sorted(ground_truth[d])} for d in domains},
+        indent=2,
+    )
 
     return (
         f"The conversation you just read covered these domains: {domain_list}.\n"
@@ -150,8 +150,12 @@ class MultiWOZDataset(DatasetInterface):
             services = [s for s in dialogue["services"] if s in VALID_DOMAINS]
             if not (self.min_domains <= len(services) <= self.max_domains):
                 continue
-            gt = _extract_ground_truth(dialogue)
-            if len(gt) < self.min_domains:
+            gt = {
+                domain: slots
+                for domain, slots in _extract_ground_truth(dialogue).items()
+                if domain in VALID_DOMAINS
+            }
+            if not (self.min_domains <= len(gt) <= self.max_domains):
                 continue
             candidates.append({"dialogue": dialogue, "ground_truth": gt})
 
