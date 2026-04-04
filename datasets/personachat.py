@@ -10,8 +10,10 @@ from dataset_interfaces.interface import DatasetInterface, TestExample
 from utils.llm import make_system_message, make_user_message, GPT_4_TURBO_BEST
 
 try:
-    from datasets import load_dataset as hf_load_dataset
-except ImportError:
+    import importlib
+    _hf_datasets = importlib.import_module("datasets")
+    hf_load_dataset = _hf_datasets.load_dataset
+except (ImportError, AttributeError):
     hf_load_dataset = None
 
 _EVAL_SYSTEM_PROMPT = """
@@ -166,12 +168,13 @@ class PersonaChatDataset(DatasetInterface):
                     )
                 else:
                     reasoning.append(f"Not recalled: \"{match['original']}\"")
-        except (JSONDecodeError, ValueError, KeyError, TypeError) as exc:
-            msg = f"LLM evaluation failed ({repr(exc)}), falling back to string matching."
+        except Exception as exc:
+            msg = f"LLM evaluation failed ({exc!r}), falling back to string matching."
             logging.warning(msg)
             reasoning.append(msg)
             score, reasoning = self._fallback_string_match(original_facts, recalled_facts, reasoning)
 
+        score = min(score, max_score)
         return score, max_score, reasoning
 
     @staticmethod
