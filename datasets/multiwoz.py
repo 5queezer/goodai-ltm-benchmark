@@ -155,7 +155,7 @@ class MultiWOZDataset(DatasetInterface):
             gt = {
                 domain: slots
                 for domain, slots in _extract_ground_truth(dialogue).items()
-                if domain in VALID_DOMAINS
+                if domain in VALID_DOMAINS and slots
             }
             if not (self.min_domains <= len(gt) <= self.max_domains):
                 continue
@@ -198,6 +198,8 @@ class MultiWOZDataset(DatasetInterface):
         - A slot scores 1 if the predicted value matches (case-insensitive,
           whitespace-normalized).
         """
+        if not expected_answers or not isinstance(expected_answers[0], dict):
+            return 0, 0, ["Missing or invalid expected_answers payload."]
         ground_truth: dict[str, dict[str, str]] = expected_answers[0]
 
         total_slots = sum(len(slots) for slots in ground_truth.values())
