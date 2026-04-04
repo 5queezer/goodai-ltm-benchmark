@@ -60,6 +60,8 @@ class MuninnChatSession(ChatSession):
     _session_tag: str = ""
     _run_id: str = ""
     _vault_counter: int = 0
+    _muninn_healthy: bool = True
+    _io_errors: int = 0
 
     # System prompt for the LLM
     _system_prompt: str = (
@@ -146,7 +148,9 @@ class MuninnChatSession(ChatSession):
                 for item in result.activations
             ]
         except Exception as e:
-            logger.warning("Recall failed: %s", e)
+            self._muninn_healthy = False
+            self._io_errors += 1
+            logger.error("Recall failed (error #%d): %s", self._io_errors, e)
             return []
 
     def _write_engram(self, message: str):
@@ -163,7 +167,9 @@ class MuninnChatSession(ChatSession):
             )
             self._write_count += 1
         except Exception as e:
-            logger.warning("Write failed: %s", e)
+            self._muninn_healthy = False
+            self._io_errors += 1
+            logger.error("Write failed (error #%d): %s", self._io_errors, e)
 
     def _write_trace(self, query, engrams, response, dataset=None):
         if self._trace_file is None:
@@ -282,6 +288,8 @@ class MuninnChatSession(ChatSession):
             "llm_model": self.llm_model,
             "run_id": self._run_id,
             "vault_counter": self._vault_counter,
+            "muninn_healthy": self._muninn_healthy,
+            "io_errors": self._io_errors,
         }
         with open(self.save_path / "muninn_state.json", "w") as f:
             json.dump(state, f)
@@ -296,16 +304,41 @@ class MuninnChatSession(ChatSession):
             self._write_count = state["write_count"]
             self._run_id = state.get("run_id", self._run_id)
             self._vault_counter = state.get("vault_counter", self._vault_counter)
+            self._muninn_healthy = state.get("muninn_healthy", True)
+            self._io_errors = state.get("io_errors", 0)
 
-    def __del__(self):
-        """Clean up async resources."""
+    def close(self):
+        """Deterministic resource cleanup with health summary."""
+        if not self._muninn_healthy:
+            logger.warning(
+                "Session ended with %d Muninn I/O errors — benchmark results may be unreliable",
+                self._io_errors,
+            )
         try:
             if self._trace_file is not None:
                 self._trace_file.close()
+                self._trace_file = None
+        except Exception as e:
+            logger.debug("Error closing trace file: %s", e)
+        try:
             if self._muninn_client is not None:
                 self._loop.run_until_complete(self._muninn_client.__aexit__(None, None, None))
+                self._muninn_client = None
+        except Exception as e:
+            logger.debug("Error closing Muninn client: %s", e)
+        try:
             if self._http_client is not None:
                 self._http_client.close()
-            self._loop.close()
-        except Exception:
-            pass
+                self._http_client = None
+        except Exception as e:
+            logger.debug("Error closing HTTP client: %s", e)
+        try:
+            if self._loop is not None:
+                self._loop.close()
+                self._loop = None
+        except Exception as e:
+            logger.debug("Error closing event loop: %s", e)
+
+    def __del__(self):
+        """Clean up async resources."""
+        self.close()
