@@ -1,5 +1,6 @@
 import json
 import math
+import os
 from copy import deepcopy
 from random import Random
 from pathlib import Path
@@ -384,7 +385,10 @@ class DatasetInterface(ABC):
             },
         ]
 
-        response = ask_llm(context=ctx, model="gpt-4-turbo", temperature=0.01, cost_callback=cost_callback)
+        eval_model = os.environ.get("LTM_BENCH_EVAL_MODEL", "gpt-4-turbo")
+        # Skip cost tracking for non-OpenAI eval models (litellm crashes on unknown model pricing)
+        cb = cost_callback if eval_model.startswith("gpt-") else None
+        response = ask_llm(context=ctx, model=eval_model, temperature=0.01, cost_callback=cb)
         score = 0
         reasoning = []
         try:

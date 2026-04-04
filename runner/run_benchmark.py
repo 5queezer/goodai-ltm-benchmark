@@ -15,12 +15,24 @@ from dataset_interfaces.interface import TestExample
 from model_interfaces.length_bias_agent import LengthBiasAgent
 from model_interfaces.interface import ChatSession
 from model_interfaces.llm_interface import LLMChatSession, TimestampLLMChatSession
-from model_interfaces.ltm_agent_wrapper import LTMAgentWrapper, LTMAgentVariant
-from model_interfaces.memgpt_interface import MemGPTChatSession
+try:
+    from model_interfaces.ltm_agent_wrapper import LTMAgentWrapper, LTMAgentVariant
+except (ImportError, ModuleNotFoundError):
+    LTMAgentWrapper = LTMAgentVariant = None
+try:
+    from model_interfaces.memgpt_interface import MemGPTChatSession
+except (ImportError, ModuleNotFoundError):
+    MemGPTChatSession = None
 from model_interfaces.cost_estimation import CostEstimationChatSession
 from model_interfaces.human import HumanChatSession
-from model_interfaces.huggingface_interface import HFChatSession
-from model_interfaces.gemini_interface import GeminiProInterface
+try:
+    from model_interfaces.huggingface_interface import HFChatSession
+except (ImportError, ModuleNotFoundError):
+    HFChatSession = None
+try:
+    from model_interfaces.gemini_interface import GeminiProInterface
+except (ImportError, ModuleNotFoundError):
+    GeminiProInterface = None
 from runner.config import RunConfig
 from runner.scheduler import TestRunner
 from utils.ui import ask_yesno, colour_print
@@ -65,6 +77,38 @@ def get_chat_session(name: str, max_prompt_size: Optional[int], run_name: str, i
     if name.startswith("huggingface/"):
         kwargs.pop("is_local")
         return HFChatSession(model=name, **kwargs)
+
+    if name.startswith("muninn"):
+        from model_interfaces.muninn_interface import MuninnChatSession
+        muninn_kwargs = {"run_name": run_name, "is_local": True}
+        # Parse optional config: muninn(url=...,llm=...,model=...)
+        if "(" in name:
+            params_str = name.split("(", 1)[1].rstrip(")")
+            for param in params_str.split(","):
+                key, value = param.strip().split("=", 1)
+                key = key.strip()
+                value = value.strip()
+                if key == "url":
+                    muninn_kwargs["muninn_url"] = value
+                elif key == "llm":
+                    muninn_kwargs["llm_url"] = value
+                elif key == "model":
+                    muninn_kwargs["llm_model"] = value
+                elif key == "vault":
+                    muninn_kwargs["vault"] = value
+                elif key == "token":
+                    logging.warning("Passing token inline is insecure. Use MUNINN_TOKEN env var instead.")
+                    muninn_kwargs["muninn_token"] = value
+                elif key == "dream":
+                    muninn_kwargs["dream_enabled"] = value.lower() in ("true", "1", "yes")
+                elif key == "dream_dry_run":
+                    muninn_kwargs["dream_dry_run"] = value.lower() in ("true", "1", "yes")
+                elif key == "dream_force":
+                    muninn_kwargs["dream_force"] = value.lower() in ("true", "1", "yes")
+                elif key == "trace":
+                    muninn_kwargs["trace_enabled"] = value.lower() in ("true", "1", "yes")
+        muninn_kwargs.setdefault("muninn_token", os.environ.get("MUNINN_TOKEN", ""))
+        return MuninnChatSession(**muninn_kwargs)
 
     try:
         if name.startswith("ts-"):
@@ -215,6 +259,7 @@ def _main(
     runner = TestRunner(config=conf, agent=agent, tests=examples, skip_evaluations=agent_name.startswith("cost("))
     time1 = time.time()
     runner.run()
+    agent.close()
 
     time2 = time.time()
     elapsed = (time2 - time1) / 60
