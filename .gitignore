@@ -7,6 +7,10 @@ logs/
 scratch/
 
 configurations/test_datasets.yml
+configurations/_trio_*.yml
+
+# Claude Code worktrees
+.claude/
 
 # Ignore data directory by default
 data/
