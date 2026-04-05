@@ -85,8 +85,6 @@ def kill_bench_server():
                         log.info("Killed old server pid=%d", pid)
     except Exception:
         pass
-    # Also try pkill as fallback
-    subprocess.run(["pkill", "-f", "muninn-bench.*--rest-addr"], capture_output=True)
     time.sleep(1)
 
 
@@ -115,7 +113,7 @@ def start_server(dream_phases: str) -> subprocess.Popen:
         ],
         env=env,
         stdout=subprocess.DEVNULL,
-        stderr=open(BENCH_DIR / "data" / "muninn_server.log", "w"),
+        stderr=subprocess.DEVNULL,
     )
     return proc
 
@@ -235,8 +233,8 @@ def objective(trial: optuna.Trial) -> float:
 
     # Must have at least one phase
     if not enabled:
-        log.info("Trial %d: no phases selected, returning 0", trial.number)
-        return 0.0
+        log.info("Trial %d: no phases selected, pruning", trial.number)
+        raise optuna.TrialPruned("no phases selected")
 
     phase_str = ",".join(enabled)
     phase_desc = ", ".join(f"{p}({PHASE_LABELS[p]})" for p in enabled)
@@ -250,14 +248,14 @@ def objective(trial: optuna.Trial) -> float:
         if not wait_for_health():
             log.error("Trial %d: server failed to start", trial.number)
             proc.terminate()
-            return 0.0
+            raise optuna.TrialPruned("server failed to start")
 
         log.info("Trial %d: server up, running benchmark...", trial.number)
         dataset_scores = run_benchmark()
 
         if not dataset_scores:
             log.warning("Trial %d: no scores returned", trial.number)
-            return 0.0
+            raise optuna.TrialPruned("no scores returned")
 
         # Log per-dataset scores
         for ds, score in sorted(dataset_scores.items()):
@@ -350,7 +348,7 @@ def main():
             if key.startswith("score_"):
                 print(f"  {key[6:]}: {val:.3f}")
 
-    print(f"\nTop 10 trials:")
+    print("\nTop 10 trials:")
     sorted_trials = sorted(
         [t for t in study.trials if t.value is not None],
         key=lambda t: t.value,

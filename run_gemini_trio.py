@@ -26,7 +26,17 @@ VARIANTS = [
 
 
 def kill_server():
-    subprocess.run(["pkill", "-f", "muninn-bench.*--rest-addr"], capture_output=True)
+    """Kill muninn-bench on the benchmark port."""
+    try:
+        result = subprocess.run(["ss", "-tlnp"], capture_output=True, text=True, timeout=5)
+        for line in result.stdout.splitlines():
+            if f":{MUNINN_PORT}" in line and "muninn" in line:
+                for part in line.split():
+                    if "pid=" in part:
+                        pid = int(part.split("pid=")[1].split(",")[0].split(")")[0])
+                        os.kill(pid, signal.SIGTERM)
+    except Exception:
+        pass
     time.sleep(1)
 
 

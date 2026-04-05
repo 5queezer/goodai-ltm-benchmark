@@ -39,9 +39,10 @@ def run_benchmark(agent_label: str, dream_enabled: bool):
     if os.path.exists(agent_dir):
         shutil.rmtree(agent_dir)
 
-    # Override agent name and dream setting
+    # Override agent name and dream setting via __init_subclass__ workaround:
+    # set defaults on the class so new instances pick them up.
+    mi.MuninnChatSession.__dataclass_fields__["dream_enabled"].default = dream_enabled
     mi.MuninnChatSession.name = property(lambda self: agent_label)
-    mi.MuninnChatSession.dream_enabled = dream_enabled
 
     sys.argv = [
         "run_benchmark",

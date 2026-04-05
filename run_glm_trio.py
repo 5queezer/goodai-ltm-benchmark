@@ -19,14 +19,24 @@ MODEL = "z-ai/glm-4.5-air:free"
 AGENT_NAME = f"MuninnChatSession - {MODEL.replace('/', '_')}"
 
 VARIANTS = [
-    {"name": "GLM 4.5 Air Baseline (no dream)", "dream": False, "phases": None},
-    {"name": "GLM 4.5 Air Full Phases", "dream": True, "phases": None},
-    {"name": "GLM 4.5 Air Best (1,2,5)", "dream": True, "phases": "1,2,5"},
+    {"name": "GLM 4.5 Air Baseline vault-isolated", "dream": False, "phases": None},
+    {"name": "GLM 4.5 Air Full Phases vault-isolated", "dream": True, "phases": None},
+    {"name": "GLM 4.5 Air Best 1-2-5 vault-isolated", "dream": True, "phases": "1,2,5"},
 ]
 
 
 def kill_server():
-    subprocess.run(["pkill", "-f", "muninn-bench.*--rest-addr"], capture_output=True)
+    """Kill muninn-bench on the benchmark port."""
+    try:
+        result = subprocess.run(["ss", "-tlnp"], capture_output=True, text=True, timeout=5)
+        for line in result.stdout.splitlines():
+            if f":{MUNINN_PORT}" in line and "muninn" in line:
+                for part in line.split():
+                    if "pid=" in part:
+                        pid = int(part.split("pid=")[1].split(",")[0].split(")")[0])
+                        os.kill(pid, signal.SIGTERM)
+    except Exception:
+        pass
     time.sleep(1)
 
 
@@ -35,6 +45,7 @@ def start_server(dream_phases=None):
         shutil.rmtree(MUNINN_DATA)
     MUNINN_DATA.mkdir(parents=True)
     env = os.environ.copy()
+    env["MUNINN_DEFAULT_VAULT_PUBLIC"] = "true"
     if dream_phases:
         env["MUNINN_DREAM_PHASES"] = dream_phases
     else:
@@ -90,8 +101,6 @@ def run_benchmark(run_name, dream_enabled):
         (
             "import os, sys; "
             "os.environ['LTM_BENCH_EVAL_MODEL'] = 'openrouter/openai/gpt-4.1-mini'; "
-            "import model_interfaces.muninn_interface as mi; "
-            "mi.MuninnChatSession._active_vault = property(lambda self: self.vault); "
             f"sys.argv = ['run_benchmark', "
             f"'-c', '{config_path.relative_to(BENCH_DIR)}', "
             f"'-a', 'muninn(url=http://127.0.0.1:{MUNINN_PORT},vault=default,model={MODEL},dream={dream_flag})', "

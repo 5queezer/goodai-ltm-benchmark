@@ -27,9 +27,9 @@ config = sys.argv[4] if len(sys.argv) > 4 else "configurations/muninn_benchmark.
 llm_model = sys.argv[5] if len(sys.argv) > 5 else None
 
 mi.MuninnChatSession.name = property(lambda self: agent_label)
-mi.MuninnChatSession.dream_enabled = dream
+mi.MuninnChatSession.__dataclass_fields__["dream_enabled"].default = dream
 if llm_model:
-    mi.MuninnChatSession.llm_model = llm_model
+    mi.MuninnChatSession.__dataclass_fields__["llm_model"].default = llm_model
 
 # Derive run name from config filename
 import yaml
