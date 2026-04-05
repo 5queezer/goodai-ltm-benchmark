@@ -50,12 +50,15 @@ PHASE_LABELS = {
 RUN_NAME = "Dream Phase Ablation"
 AGENT_NAME = "MuninnChatSession - google_gemini-3.1-flash-lite-preview"
 
+DATA_DIR = BENCH_DIR / "data"
+DATA_DIR.mkdir(exist_ok=True)
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
     handlers=[
         logging.StreamHandler(),
-        logging.FileHandler(BENCH_DIR / "data" / "ablation.log"),
+        logging.FileHandler(DATA_DIR / "ablation.log"),
     ],
 )
 log = logging.getLogger("ablation")
