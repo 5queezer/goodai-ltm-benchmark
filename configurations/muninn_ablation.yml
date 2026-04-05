@@ -1,0 +1,20 @@
+config:
+  debug: True
+  run_name: "Dream Phase Ablation"
+  incompatibilities: []
+
+datasets:
+    args:
+      memory_span: 1000
+      dataset_examples: 3
+
+    datasets:
+      - name: "personachat"
+        args:
+          num_persona_facts: 4
+          num_filler_turns: 6
+
+      - name: "multiwoz"
+        args:
+          min_domains: 2
+          max_domains: 3
