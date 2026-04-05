@@ -28,7 +28,7 @@ def _load_hf_dataset(split: str = "test"):
     # If the HuggingFace module is already loaded, reuse it.
     hf = sys.modules.get("datasets")
     if hf is not None and hasattr(hf, "load_dataset"):
-        return hf.load_dataset("multi_woz_v22", split=split, trust_remote_code=True, revision="fd8c4a9484b1f47152fe23ddcc87289777d355fd")
+        return hf.load_dataset("multi_woz_v22", split=split)
 
     # Stash the local ``datasets`` package so importlib finds the HF one.
     project_root = str(pathlib.Path(__file__).resolve().parent.parent)
@@ -55,9 +55,7 @@ def _load_hf_dataset(split: str = "test"):
         sys.path = saved_path
         sys.modules.update(saved_modules)
 
-    return hf_datasets.load_dataset(
-        "multi_woz_v22", split=split, trust_remote_code=True, revision="fd8c4a9484b1f47152fe23ddcc87289777d355fd",
-    )
+    return hf_datasets.load_dataset("multi_woz_v22", split=split)
 
 
 def _extract_ground_truth(dialogue: dict) -> dict[str, dict[str, str]]:
@@ -179,7 +177,7 @@ class MultiWOZDataset(DatasetInterface):
                 script=script,
                 expected_responses=[ground_truth],
                 is_question=is_question,
-                example_id=dialogue.get("dialogue_id", str(idx)),
+                example_id=dialogue.get("dialogue_id", str(idx)).removesuffix(".json"),
             )
             examples.append(example)
 

@@ -9,12 +9,35 @@ from goodai.helpers.json_helper import sanitize_and_parse_json
 from dataset_interfaces.interface import DatasetInterface, TestExample
 from utils.llm import make_system_message, make_user_message, GPT_4_TURBO_BEST
 
-try:
-    import importlib
-    _hf_datasets = importlib.import_module("datasets")
-    hf_load_dataset = _hf_datasets.load_dataset
-except (ImportError, AttributeError):
-    hf_load_dataset = None
+def _load_personachat_data():
+    """Load PersonaChat data from local parquet (pre-downloaded from HuggingFace).
+
+    Falls back to HuggingFace download if parquet not found.
+    """
+    import pathlib
+    parquet_path = pathlib.Path(__file__).resolve().parent.parent / "data" / "personachat_train.parquet"
+    if parquet_path.exists():
+        import pyarrow.parquet as pq
+        table = pq.read_table(str(parquet_path))
+        return table.to_pylist()
+
+    # Fallback: try HuggingFace (may fail on Python 3.13 with dill bug)
+    import importlib, sys
+    project_root = str(pathlib.Path(__file__).resolve().parent.parent)
+    saved_path = sys.path[:]
+    saved_modules = {}
+    for key in list(sys.modules):
+        if key == "datasets" or key.startswith("datasets."):
+            saved_modules[key] = sys.modules.pop(key)
+    sys.path = [p for p in sys.path if p != project_root and p != ""]
+    try:
+        hf_datasets = importlib.import_module("datasets")
+        if not hasattr(hf_datasets, "load_dataset"):
+            raise ImportError("HuggingFace datasets library not found")
+        return hf_datasets.load_dataset("AlekseyKorshuk/persona-chat", split="train")
+    finally:
+        sys.path = saved_path
+        sys.modules.update(saved_modules)
 
 _EVAL_SYSTEM_PROMPT = """
 You are evaluating whether a set of recalled persona facts matches the original facts.
@@ -42,16 +65,11 @@ class PersonaChatDataset(DatasetInterface):
     num_filler_turns: int = 6
 
     def __post_init__(self):
-        if hf_load_dataset is None:
-            raise ImportError(
-                "The HuggingFace `datasets` library is required for the PersonaChat dataset. "
-                "Install it with: pip install datasets"
-            )
         try:
-            self._hf_data = hf_load_dataset("bavard/personachat_truecased", split="train")
+            self._hf_data = _load_personachat_data()
         except Exception as e:
             raise RuntimeError(
-                f"Failed to load PersonaChat dataset from HuggingFace: {e}"
+                f"Failed to load PersonaChat dataset: {e}"
             ) from e
 
     def generate_examples(self, num_examples: int) -> List[TestExample]:
@@ -118,16 +136,24 @@ class PersonaChatDataset(DatasetInterface):
         search_range = min(cursor + 20, len(indices))
         for i in range(cursor, search_range):
             entry = self._hf_data[indices[i]]
-            utterances = entry.get("history", [])
-            if not utterances:
-                # Fall back to 'candidates' if 'history' is empty
-                utterances = entry.get("candidates", [])
-            for utt in utterances:
-                text = utt.strip()
-                if text:
-                    filler.append(text)
-                if len(filler) >= self.num_filler_turns:
-                    return filler
+            # AlekseyKorshuk/persona-chat nests history inside utterances list
+            utterances_list = entry.get("utterances", [])
+            if utterances_list:
+                for utt_obj in utterances_list:
+                    for text in utt_obj.get("history", []):
+                        text = text.strip()
+                        if text:
+                            filler.append(text)
+                        if len(filler) >= self.num_filler_turns:
+                            return filler
+            else:
+                # Flat format fallback
+                for text in entry.get("history", entry.get("candidates", [])):
+                    text = text.strip()
+                    if text:
+                        filler.append(text)
+                    if len(filler) >= self.num_filler_turns:
+                        return filler
         return filler
 
     def evaluate_correct(
