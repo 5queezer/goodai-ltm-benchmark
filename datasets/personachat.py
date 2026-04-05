@@ -139,13 +139,16 @@ class PersonaChatDataset(DatasetInterface):
             # AlekseyKorshuk/persona-chat nests history inside utterances list
             utterances_list = entry.get("utterances", [])
             if utterances_list:
+                seen_history_len = 0
                 for utt_obj in utterances_list:
-                    for text in utt_obj.get("history", []):
+                    history = utt_obj.get("history", [])
+                    for text in history[seen_history_len:]:
                         text = text.strip()
                         if text:
                             filler.append(text)
                         if len(filler) >= self.num_filler_turns:
                             return filler
+                    seen_history_len = max(seen_history_len, len(history))
             else:
                 # Flat format fallback
                 for text in entry.get("history", entry.get("candidates", [])):
