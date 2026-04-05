@@ -83,7 +83,7 @@ class MuninnChatSession(ChatSession):
 
     @property
     def name(self):
-        return f"MuninnChatSession - {self.llm_model}"
+        return f"MuninnChatSession - {self.llm_model.replace('/', '_')}"
 
     @property
     def _active_vault(self):

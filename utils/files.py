@@ -67,5 +67,5 @@ def parse_definition_path(path: Path | str) -> dict[str, str]:
     return dict(
         benchmark_name=benchmark_name,
         dataset_name=dataset_name,
-        example_id=int(definition_fname.removesuffix(".def.json"))
+        example_id=definition_fname.removesuffix(".def.json")
     )
